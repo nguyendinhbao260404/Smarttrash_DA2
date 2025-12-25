@@ -1,0 +1,17 @@
+# Don't ignore these - we need them!
+!src/
+!public/
+!index.html
+!package.json
+!package-lock.json
+!vite.config.ts
+!tsconfig.json
+!postcss.config.js
+!tailwind.config.js
+
+# Ignore these
+node_modules
+.git
+.env
+dist
+*.log

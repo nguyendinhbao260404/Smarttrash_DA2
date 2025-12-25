@@ -1,0 +1,63 @@
+# Arduino build files
+*.o
+*.a
+*.elf
+*.hex
+*.bin
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test and debug files
+*_test/
+*_debug/
+d7_pin_test/
+vl53l0x_debug_test/
+vl53l0x_pololu_test/
+vl6180x_shdn_test/
+vl53l1x_test/
+node1_minimal_test/
+node1_debug_test/
+node1_no_vl53_version/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Python cache (for AI service)
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+env/
+
+# Node modules (for frontend)
+node_modules/
+.npm/
+dist/
+build/
+
+# Environment files with secrets
+.env
+.env.local
+!.env.example
+!.env.production
+
+# Database
+*.db
+*.sqlite
+*.sql.bak
+
+# Logs
+*.log
+logs/

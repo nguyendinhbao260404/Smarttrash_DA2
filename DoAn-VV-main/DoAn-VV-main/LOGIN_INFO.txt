@@ -1,0 +1,25 @@
+# 🔐 LOGIN CREDENTIALS
+
+## Default Admin Account
+
+**Username**: `admin`  
+**Password**: `admin123`
+
+---
+
+## Nếu quên password:
+
+Check file: `doan2/src/main/java/com/trsang/doan2/config/DataInitializer.java`
+
+Line 69:
+```java
+.password(passwordEncoder.encode("admin123"))
+```
+
+---
+
+## Tạo user mới:
+
+1. Login với admin
+2. Navigate to Register page
+3. Create new user
