@@ -169,6 +169,7 @@ bool waitForGPSLock(unsigned long timeout) {
 int readIRSensor() { return analogRead(IR_SENSOR_PIN); }
 
 int readSR04Distance() {
+  Serial.println("[SR04] Starting read...");
   const int NUM_SAMPLES = 3;
   int validSamples = 0;
   long totalDistance = 0;
@@ -185,12 +186,22 @@ int readSR04Distance() {
       long duration = pulseIn(SR04_ECHO, HIGH, 30000);
 
       if (duration > 0) {
-        long distance = (long)(duration / 58); // Khoảng cách tính bằng cm
+        long distance_cm = (long)(duration / 58); // cm
+        Serial.print("[SR04] Sample ");
+        Serial.print(i);
+        Serial.print(": ");
+        Serial.print(distance_cm);
+        Serial.println("cm");
+
         // Validate reading
-        if (distance > 0 && distance < 400) { // SR04 max ~4m
-          totalDistance += distance;
+        if (distance_cm > 0 && distance_cm < 400) { // SR04 max ~4m
+          totalDistance += distance_cm;
           validSamples++;
         }
+      } else {
+        Serial.print("[SR04] Sample ");
+        Serial.print(i);
+        Serial.println(": No echo!");
       }
 
       if (i < NUM_SAMPLES - 1)
@@ -199,14 +210,27 @@ int readSR04Distance() {
 
     if (validSamples == 0) {
       retries++;
+      Serial.print("[SR04] Retry ");
+      Serial.println(retries);
       delay(50); // Wait before retry
     }
   }
 
-  if (validSamples == 0)
+  if (validSamples == 0) {
+    Serial.println("[SR04] FAILED - No valid samples!");
     return -1;
+  }
 
-  return (int)(totalDistance / validSamples);
+  int avg_cm = (int)(totalDistance / validSamples);
+  int avg_mm = avg_cm * 10; // Convert cm to mm
+
+  Serial.print("[SR04] Result: ");
+  Serial.print(avg_cm);
+  Serial.print("cm = ");
+  Serial.print(avg_mm);
+  Serial.println("mm");
+
+  return avg_mm; // Return in mm for consistency
 }
 
 void readSensorData(SensorData &data) {
@@ -256,6 +280,19 @@ void sendLoRaData(const char *payload) {
 void controlLid() {
   unsigned long currentMillis = millis();
 
+  // KEEP-ALIVE: Nếu nắp đang mở, kiểm tra xem còn người không (qua IR)
+  if (isLidOpen) {
+    int irValue = readIRSensor();
+
+    // Nếu vẫn phát hiện người (IR < threshold), GIA HẠN thời gian mở
+    if (irValue >= 0 && irValue < IR_HAND_THRESHOLD) {
+      lidOpenStart = currentMillis; // Reset timer
+      Serial.print(F("🔄 Keep-Alive: IR detected ("));
+      Serial.print(irValue);
+      Serial.println("), extending open time...");
+    }
+  }
+
   // Đóng nắp
   if (isLidOpen && (currentMillis - lidOpenStart >= LID_OPEN_TIME)) {
     Serial.println(">>> Closing Lid <<<");
@@ -285,7 +322,7 @@ void controlLid() {
           delay(15);
         }
 
-        servo.write(90);
+        servo.write(160);
         isLidOpen = true;
         lidOpenStart = currentMillis;
         lastIRDetect = currentMillis;

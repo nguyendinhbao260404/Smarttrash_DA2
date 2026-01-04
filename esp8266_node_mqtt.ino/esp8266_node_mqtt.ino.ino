@@ -154,45 +154,39 @@ void setup() {
     Serial.println(F("❌"));
   }
 
-  // TIME-SHARING: Chỉ init VL53L1X, VL6180X sẽ init khi cần đọc
-  Serial.print(F("Init VL53L1X (Hand)... "));
+  // TIME-SHARING: Chỉ init VL6180X, VL53L1X sẽ init khi cần đọc
+  Serial.print(F("Init VL6180X (Hand)... "));
 
-  // CRITICAL: Power cycle VL53L1X (proven working sequence from test)
-  digitalWrite(VL6180_SHDN, LOW); // Ensure VL6180X is OFF
-  digitalWrite(VL53_XSHUT, LOW);  // Reset VL53L1X
+  // CRITICAL: Power cycle VL6180X (proven working sequence from test)
+  digitalWrite(VL53_XSHUT, LOW);  // Ensure VL53L1X is OFF
+  digitalWrite(VL6180_SHDN, LOW); // Reset VL6180X
   delay(100);
-  digitalWrite(VL53_XSHUT, HIGH); // Power up VL53L1X
-  delay(200);                     // Wait for sensor boot
+  digitalWrite(VL6180_SHDN, HIGH); // Power up VL6180X
+  delay(300); // Wait for sensor boot (VL6180X needs more time)
 
-  // Init VL53L1X with retry
-  if (!vl53.begin(0x29, &Wire)) {
+  // Init VL6180X with retry
+  if (!vl6180.begin()) {
     Serial.print(F("retry..."));
-    digitalWrite(VL53_XSHUT, LOW);
+    digitalWrite(VL6180_SHDN, LOW);
     delay(200);
-    digitalWrite(VL53_XSHUT, HIGH);
+    digitalWrite(VL6180_SHDN, HIGH);
     delay(300);
 
-    if (!vl53.begin(0x29, &Wire)) {
+    if (!vl6180.begin()) {
       Serial.println(F("❌ DISABLED"));
-      sensorStatus.vl53l1x_ok = false;
+      sensorStatus.vl6180x_ok = false;
     } else {
-      goto vl53_ok;
+      goto vl6180_ok;
     }
   } else {
-  vl53_ok:
-    if (vl53.startRanging()) {
-      Serial.println(F("✅"));
-      sensorStatus.vl53l1x_ok = true;
-      vl53.setTimingBudget(50); // 50ms timing budget
-    } else {
-      Serial.println(F("❌ Ranging failed"));
-      sensorStatus.vl53l1x_ok = false;
-    }
+  vl6180_ok:
+    Serial.println(F("✅"));
+    sensorStatus.vl6180x_ok = true;
   }
 
-  // VL6180X will be init on-demand in readTrashLevel()
-  Serial.println(F("VL6180X (Trash): On-demand init"));
-  sensorStatus.vl6180x_ok = true; // Assume OK, will verify when reading
+  // VL53L1X will be init on-demand in readTrashLevel()
+  Serial.println(F("VL53L1X (Trash): On-demand init"));
+  sensorStatus.vl53l1x_ok = true; // Assume OK, will verify when reading
 
   Serial.println(F(">>> TIME-SHARING MODE ENABLED <<<\n"));
 
@@ -283,69 +277,120 @@ bool waitForGPSLock(unsigned long timeout) {
 }
 
 int readHandDistance() {
-  if (!sensorStatus.vl53l1x_ok)
+  if (!sensorStatus.vl6180x_ok)
     return -1;
 
-  // VL53L1X API
-  if (vl53.dataReady()) {
-    int16_t distance = vl53.distance();
-    vl53.clearInterrupt();
+  // VL6180X API - Direct read (no time-sharing needed, always active)
+  uint8_t range = vl6180.readRange();
+  uint8_t status = vl6180.readRangeStatus();
 
-    if (distance == -1) {
-      return -3; // Out of range
-    }
-    return (int)distance;
+  if (status == VL6180X_ERROR_NONE || (status == 6 && range < 200)) {
+    return (int)range;
   }
 
-  return -2; // Data not ready
+  return -1; // Error reading
 }
 
 int readTrashLevel() {
-  // TIME-SHARING: Shutdown VL53L0X, enable VL6180, read, then restore
+  // TIME-SHARING: Shutdown VL6180X, enable VL53L1X, read, then restore
 
-  // 1. Shutdown VL53L0X
-  digitalWrite(VL53_XSHUT, LOW);
+  Serial.println("[TRASH] Starting read...");
+
+  // 1. Shutdown VL6180X
+  digitalWrite(VL6180_SHDN, LOW);
   delay(50);
+  Serial.println("[TRASH] VL6180X shutdown");
 
-  // 2. Enable VL6180X
-  digitalWrite(VL6180_SHDN, HIGH);
-  delay(100);
+  // 2. Enable VL53L1X
+  digitalWrite(VL53_XSHUT, HIGH);
+  delay(200); // VL53L1X boot time
+  Serial.println("[TRASH] VL53L1X enabled");
 
-  // 3. Init VL6180X (address 0x29 now available)
-  if (!vl6180.begin()) {
-    // Init failed, restore VL53L0X
-    digitalWrite(VL6180_SHDN, LOW);
+  // 3. Init VL53L1X (address 0x29 now available)
+  Serial.print("[TRASH] Init VL53L1X... ");
+  if (!vl53.begin(0x29, &Wire)) {
+    Serial.println("FAILED!");
+    // Restore VL6180X
+    digitalWrite(VL53_XSHUT, LOW);
     delay(50);
-    digitalWrite(VL53_XSHUT, HIGH);
-    delay(100);
-    // VL53L0X doesn't need startRanging() - ready after begin()
+    digitalWrite(VL6180_SHDN, HIGH);
+    delay(300);
+    if (vl6180.begin()) {
+      sensorStatus.vl6180x_ok = true;
+    }
+    return -1;
+  }
+  Serial.println("OK!");
+
+  if (!vl53.startRanging()) {
+    Serial.println("[TRASH] startRanging FAILED!");
+    // Restore VL6180X
+    digitalWrite(VL53_XSHUT, LOW);
+    delay(50);
+    digitalWrite(VL6180_SHDN, HIGH);
+    delay(300);
+    if (vl6180.begin()) {
+      sensorStatus.vl6180x_ok = true;
+    }
     return -1;
   }
 
-  // 4. Read VL6180X
+  vl53.setTimingBudget(50); // 50ms timing budget
+  delay(100);               // Allow sensor to stabilize
+
+  // 4. Read VL53L1X with multiple attempts
   const int NUM_SAMPLES = 3;
   int validSamples = 0;
   long totalDist = 0;
 
   for (int i = 0; i < NUM_SAMPLES; i++) {
-    uint8_t range = vl6180.readRange();
-    uint8_t status = vl6180.readRangeStatus();
-
-    if (status == VL6180X_ERROR_NONE) {
-      totalDist += range;
-      validSamples++;
+    // Wait for data ready
+    int timeout = 0;
+    while (!vl53.dataReady() && timeout < 20) {
+      delay(10);
+      timeout++;
     }
-    delay(10);
+
+    if (vl53.dataReady()) {
+      int16_t distance = vl53.distance();
+      vl53.clearInterrupt();
+
+      Serial.print("[TRASH] Sample ");
+      Serial.print(i);
+      Serial.print(": range=");
+      Serial.print(distance);
+      Serial.println("mm");
+
+      if (distance > 0 && distance < 4000) { // Valid range for VL53L1X
+        totalDist += distance;
+        validSamples++;
+      }
+    }
+    delay(20);
   }
 
   int result = (validSamples == 0) ? -1 : (int)(totalDist / validSamples);
+  Serial.print("[TRASH] Valid samples: ");
+  Serial.println(validSamples);
+  Serial.print("[TRASH] Result: ");
+  Serial.print(result);
+  Serial.println("mm");
 
-  // 5. Shutdown VL6180X, restore VL53L0X
-  digitalWrite(VL6180_SHDN, LOW);
+  // 5. Shutdown VL53L1X, restore VL6180X
+  digitalWrite(VL53_XSHUT, LOW);
   delay(50);
-  digitalWrite(VL53_XSHUT, HIGH);
-  delay(100);
-  // VL53L0X doesn't need startRanging() - ready after begin()
+  digitalWrite(VL6180_SHDN, HIGH);
+  delay(300);
+
+  // Restore VL6180X
+  Serial.print("[TRASH] Restoring VL6180X... ");
+  if (!vl6180.begin()) {
+    Serial.println("FAILED!");
+    sensorStatus.vl6180x_ok = false;
+  } else {
+    Serial.println("OK!");
+    sensorStatus.vl6180x_ok = true;
+  }
 
   return result;
 }
@@ -409,6 +454,20 @@ void sendLoRaData(const char *payload) {
 void controlLid() {
   unsigned long currentMillis = millis();
 
+  // KEEP-ALIVE: Nếu nắp đang mở, kiểm tra xem còn tay không
+  if (isLidOpen) {
+    int handDist = readHandDistance();
+
+    // Nếu vẫn thấy tay, GIA HẠN thời gian mở thêm
+    if (handDist >= 0 && handDist < HAND_DETECT_DIST) {
+      lidOpenStart =
+          currentMillis; // Reset timer → Nắp sẽ mở thêm LID_OPEN_TIME nữa
+      Serial.print(F("🔄 Keep-Alive: Hand still detected ("));
+      Serial.print(handDist);
+      Serial.println("mm), extending open time...");
+    }
+  }
+
   // Đóng nắp
   if (isLidOpen && (currentMillis - lidOpenStart >= LID_OPEN_TIME)) {
     Serial.println(">>> Closing Lid <<<");
@@ -445,10 +504,10 @@ void controlLid() {
           delay(50); // Tăng delay sau attach
         }
 
-        Serial.print("Writing 90... ");
-        servo.write(90);
+        Serial.print("Writing 165... ");
+        servo.write(165);
         Serial.println("OK");
-        delay(500); // ĐỢI servo chuyển động xong!
+        delay(1000); // ĐỢI servo chuyển động xong!
         isLidOpen = true;
         lidOpenStart = currentMillis;
         lastHandDetect = currentMillis;

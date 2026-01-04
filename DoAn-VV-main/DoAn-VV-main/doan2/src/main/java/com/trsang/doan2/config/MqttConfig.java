@@ -43,7 +43,7 @@ public class MqttConfig {
             options.setServerURIs(serverUris);
         } else {
             log.warn("MQTT server URIs not configured, using default: ssl://localhost:8883");
-            options.setServerURIs(new String[]{"ssl://localhost:8883"});
+            options.setServerURIs(new String[] { "ssl://localhost:8883" });
         }
 
         // Set authentication if credentials provided
@@ -71,17 +71,25 @@ public class MqttConfig {
 
     @Bean
     public MessageProducer inbound() {
-        MqttPahoMessageDrivenChannelAdapter adapter =
-                new MqttPahoMessageDrivenChannelAdapter(
-                        "tcp://localhost:1883",
-                        mqttClientId,
-                        mqttClientFactory(),
-                        "data/+/sensors");
+        log.info("========================================");
+        log.info("Configuring MQTT Inbound Adapter");
+        log.info("MQTT Server URIs: {}", mqttServerUris);
+        log.info("MQTT Username: {}", mqttUsername);
+        log.info("MQTT Client ID: {}-inbound", mqttClientId);
+        log.info("Subscribe Topic: smarttrash/+/data");
+        log.info("========================================");
+
+        MqttPahoMessageDrivenChannelAdapter adapter = new MqttPahoMessageDrivenChannelAdapter(
+                mqttClientId + "-inbound", // Client ID
+                mqttClientFactory(), // Factory (has broker URIs configured)
+                "smarttrash/+/data"); // Subscribe topics
 
         adapter.setCompletionTimeout(5000);
         adapter.setConverter(new DefaultPahoMessageConverter());
         adapter.setQos(1);
         adapter.setOutputChannel(mqttInputChannel());
+
+        log.info("MQTT Inbound Adapter configured successfully");
 
         return adapter;
     }
@@ -89,10 +97,9 @@ public class MqttConfig {
     @Bean
     public MqttClient mqttClient(MqttPahoClientFactory factory) throws MqttException {
         MqttClient client = new MqttClient(
-            mqttServerUris.split(",")[0], 
-            mqttClientId, 
-            null
-        );
+                mqttServerUris.split(",")[0],
+                mqttClientId,
+                null);
         client.setCallback(new org.eclipse.paho.client.mqttv3.MqttCallback() {
             @Override
             public void connectionLost(Throwable cause) {
@@ -100,7 +107,8 @@ public class MqttConfig {
             }
 
             @Override
-            public void messageArrived(String topic, org.eclipse.paho.client.mqttv3.MqttMessage message) throws Exception {
+            public void messageArrived(String topic, org.eclipse.paho.client.mqttv3.MqttMessage message)
+                    throws Exception {
                 log.debug("Message arrived on topic {}: {}", topic, new String(message.getPayload()));
             }
 
@@ -109,7 +117,7 @@ public class MqttConfig {
                 log.debug("Message delivery completed");
             }
         });
-        
+
         return client;
     }
 }

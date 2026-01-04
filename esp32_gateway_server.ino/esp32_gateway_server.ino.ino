@@ -17,16 +17,16 @@
 #include <Wire.h>
 
 // ================== WIFI CONFIG ==================
-const char *STA_SSID = "Su Ni";
-const char *STA_PASS = "04072009";
+const char *STA_SSID = "YOUR_WIFI_SSID";     // Thay bằng tên WiFi của bạn
+const char *STA_PASS = "YOUR_WIFI_PASSWORD"; // Thay bằng mật khẩu WiFi
 const char *AP_SSID = "SmartTrash_AP";
 const char *AP_PASS = "12345678";
 
 // ================== MQTT CONFIG ==================
 const char *MQTT_BROKER = "e475fd80cdeb43c78a9cc8ac1abec5d7.s1.eu.hivemq.cloud";
 const int MQTT_PORT = 8883;
-const char *MQTT_USER = "esp32-gateway";
-const char *MQTT_PASS = "Admin123";
+const char *MQTT_USER = "YOUR_MQTT_USERNAME"; // Thay bằng MQTT username
+const char *MQTT_PASS = "YOUR_MQTT_PASSWORD"; // Thay bằng MQTT password
 const char *MQTT_CLIENT_ID = "esp32-gateway-001";
 
 // MQTT Topics
